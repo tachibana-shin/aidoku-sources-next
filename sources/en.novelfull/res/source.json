@@ -1,0 +1,12 @@
+{
+	"info": {
+		"id": "en.novelfull",
+		"name": "Novel Full",
+		"version": 6,
+		"contentRating": 1,
+		"url": "https://novelfull.net",
+		"languages": [
+			"en"
+		]
+	}
+}
