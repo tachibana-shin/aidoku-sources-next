@@ -3,10 +3,13 @@ use aidoku::{
 	Chapter, FilterValue, Manga, Page, PageContent, Result, Source, Viewer,
 	alloc::{borrow::ToOwned, string::ToString, *},
 	helpers::uri::QueryParameters,
-	imports::{html::Element, std::send_partial_result},
+	imports::{
+		html::{Element, Html},
+		std::send_partial_result,
+	},
 	prelude::*,
 };
-use wpcomics::{Impl, Params, WpComics};
+use wpcomics::{Cache, Impl, Params, WpComics, helpers::extract_f32_from_string};
 
 const BASE_URL: &str = "https://novelfull.net";
 
@@ -224,6 +227,129 @@ impl Impl for NovelFull {
 		});
 
 		Ok(pages)
+	}
+
+	fn get_chapter_list(
+		&self,
+		cache: &mut Cache,
+		params: &Params,
+		url: String,
+	) -> Result<Vec<Chapter>> {
+		let mut all_chapters = Vec::new();
+		let mut page = 1;
+
+		loop {
+			let html_data =
+				self.cache_manga_page(cache, params, &format!("{}?page={page}", url.to_owned()))?;
+			let html = Html::parse_with_url(html_data, url.to_owned())?;
+			let title_untrimmed = (params.manga_details_title_transformer)(
+				html.select(params.manga_details_title)
+					.and_then(|v| v.text())
+					.unwrap_or_default(),
+			);
+			let title = title_untrimmed.trim();
+			let mut skipped_first = false;
+
+			let Some(chapters_iter) = html.select(params.manga_details_chapters) else {
+				return Ok(Vec::new());
+			};
+
+			let chapters = chapters_iter
+				.filter_map(|chapter_node| {
+					if params.chapter_skip_first && !skipped_first {
+						skipped_first = true;
+						return None;
+					}
+
+					let chapter_url = chapter_node
+						.select_first(params.chapter_anchor_selector)?
+						.attr("abs:href")?;
+
+					let chapter_id = (params.chapter_parse_id)(chapter_url.clone());
+					let raw_chapter_title = chapter_node
+						.select(params.chapter_anchor_selector)?
+						.text()
+						.unwrap_or_default();
+					let numbers = extract_f32_from_string(title, &raw_chapter_title);
+					let (volume_number, chapter_number) = if numbers.len() > 1
+						&& raw_chapter_title.to_ascii_lowercase().contains("vol")
+					{
+						(numbers[0], numbers[1])
+					} else if !numbers.is_empty() {
+						(-1.0, numbers[0])
+					} else {
+						(-1.0, -1.0)
+					};
+					let mut new_chapter_title = None;
+					if chapter_number >= 0.0 {
+						let splitter = format!(" {}", chapter_number);
+						let splitter2 = format!("#{}", chapter_number);
+						if raw_chapter_title.contains(&splitter) {
+							let split = raw_chapter_title
+								.splitn(2, &splitter)
+								.collect::<Vec<&str>>();
+							new_chapter_title =
+								Some(String::from(split[1]).replacen([':', '-'], "", 1));
+						} else if raw_chapter_title.contains(&splitter2) {
+							let split = raw_chapter_title
+								.splitn(2, &splitter2)
+								.collect::<Vec<&str>>();
+							new_chapter_title =
+								Some(String::from(split[1]).replacen([':', '-'], "", 1));
+						}
+					}
+					let date_updated = (params.time_converter)(
+						params,
+						&chapter_node
+							.select(params.chapter_date_selector)?
+							.text()
+							.unwrap_or_default(),
+					);
+
+					let chapter_title = new_chapter_title
+						.and_then(|s| {
+							let trimmed = s.trim();
+							if trimmed.is_empty() {
+								None
+							} else {
+								Some(trimmed.into())
+							}
+						})
+						.or_else(|| Some(raw_chapter_title.trim().into()));
+
+					Some(Chapter {
+						key: chapter_id,
+						title: chapter_title,
+						volume_number: if volume_number < 0.0 {
+							None
+						} else {
+							Some(volume_number)
+						},
+						chapter_number: if chapter_number < 0.0 && volume_number >= 0.0 {
+							None
+						} else {
+							Some(chapter_number)
+						},
+						date_uploaded: Some(date_updated),
+						url: Some(chapter_url),
+						..Default::default()
+					})
+				})
+				.collect::<Vec<_>>();
+
+			all_chapters.extend(chapters);
+
+			if html
+				.select_first(".pagination .last:not(.disabled)")
+				.is_none()
+			{
+				break;
+			}
+
+			page += 1;
+		}
+
+		Ok(all_chapters)
 	}
 
 	fn get_manga_update(
