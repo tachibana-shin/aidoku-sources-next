@@ -10,7 +10,7 @@ use core::fmt::{Display, Formatter, Result as FmtResult};
 use strum::{Display, EnumIs, FromRepr};
 
 #[derive(Display, EnumIs)]
-#[strum(prefix = "https://www.manga2025.com")]
+#[strum(prefix = "https://www.manga2026.com")]
 pub enum Url<'a> {
 	#[strum(to_string = "/filter")]
 	GenresPage,

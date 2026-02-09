@@ -14,7 +14,7 @@ mod home;
 mod html;
 mod net;
 
-pub const BASE_URL: &str = "https://www.wnacg01.cc";
+pub const BASE_URL: &str = "https://www.wn07.ru";
 pub const USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36";
 
 pub fn create_request(path: &str) -> Result<Request> {

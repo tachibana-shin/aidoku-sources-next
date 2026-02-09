@@ -65,8 +65,8 @@ impl ChapterList {
 					None => continue,
 				};
 				let id = item
-					.get("codes")
-					.and_then(|v| v.as_str())
+					.get("id")
+					.and_then(|v| v.as_i64())
 					.unwrap_or_default()
 					.to_string();
 				let title = item
@@ -76,7 +76,7 @@ impl ChapterList {
 					.to_string();
 				let chapter_or_volume =
 					extract_chapter_number(&title).unwrap_or((all_chapters.len() + 1) as f32);
-				let url = format!("{}/mangaread/{}", BASE_URL, id);
+				let url = format!("{}/mangaread/{}/{}", BASE_URL, manga_id, id);
 
 				let (ch, vo) = if title.trim().ends_with('卷') {
 					(-1.0, chapter_or_volume)
