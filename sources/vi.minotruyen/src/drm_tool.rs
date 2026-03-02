@@ -101,7 +101,7 @@ where
 	{
 		table.set(&mut caller, index, value)?;
 	} else {
-		println!("PANIC: table index {} exists!!!", index);
+return Err(anyhow::anyhow!("Table index {} already exists", index));
 	}
 
 	Ok(index as i32)
