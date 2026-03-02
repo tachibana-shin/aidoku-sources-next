@@ -269,7 +269,7 @@ impl Source for MinoTruyen {
 				.map_err(|e| aidoku::anyhow!("Failed to decrypt chapter data: {}", e))?,
 		)?;
 
-		let server = defaults_get::<String>("server").unwrap_or("0".to_owned());
+let server = defaults_get::<String>("server").unwrap_or("TT2".to_owned());
 		let first_server = servers.first().ok_or(error!("server not found"))?;
 
 		let selected = servers
