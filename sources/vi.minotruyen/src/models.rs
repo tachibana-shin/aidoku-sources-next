@@ -120,7 +120,7 @@ impl From<BookItem> for Manga {
 				"{BASE_URL}/{}/books/{}-{}",
 				value.category, value.slug, value.book_id
 			)),
-tags: (!tags.is_empty()).then_some(tags),
+			tags: (!tags.is_empty()).then_some(tags),
 			status: if value.status == 1 {
 				MangaStatus::Ongoing
 			} else {

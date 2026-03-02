@@ -266,10 +266,10 @@ impl Source for MinoTruyen {
 
 		let servers = serde_json::from_str::<Vec<ChapterContent>>(
 			&decrypt_cryptojs_passphrase(&data, SECRET_DATA_CHAPTER)
-				.map_err(|e| bail!("Failed to decrypt chapter data: {}", e))?,
+				.map_err(|e| error!("Failed to decrypt chapter data: {}", e))?,
 		)?;
 
-let server = defaults_get::<String>("server").unwrap_or("TT2".to_owned());
+		let server = defaults_get::<String>("server").unwrap_or("TT2".to_owned());
 		let first_server = servers.first().ok_or(error!("server not found"))?;
 
 		let selected = servers

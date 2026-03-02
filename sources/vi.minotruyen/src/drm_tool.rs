@@ -101,7 +101,7 @@ where
 	{
 		table.set(&mut caller, index, value)?;
 	} else {
-return Err(anyhow::anyhow!("Table index {} already exists", index));
+		return Err(anyhow::anyhow!("Table index {} already exists", index));
 	}
 
 	Ok(index as i32)
@@ -436,14 +436,13 @@ fn register_linker(linker: &mut Linker<WasmStore>) -> anyhow::Result<()> {
 		"./drm_tool_bg.js",
 		"__wbindgen_throw",
 		wasmi::FuncType::new([ValType::I32, ValType::I32], []),
-|
-		_caller, params, _|
-		-> Result<(), wasmi::Trap> {
+		|_caller, params, _| {
 			let ptr = params[0].i32().unwrap_or(0);
 			let len = params[1].i32().unwrap_or(0);
 			error!("WASM throw: ptr={} len={}", ptr, len);
-			Err(wasmi::Trap::new(wasmi::TrapCode::UnreachableCodeReached))
-		}
+
+			Ok(())
+		},
 	)?;
 
 	// ==== debug string ====
