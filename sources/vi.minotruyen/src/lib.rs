@@ -25,7 +25,7 @@ use crate::{
 	utils::{extract_data_chapter_block, extract_next_object},
 };
 
-pub const BASE_URL: &str = "https://minotruyenv5.xyz";
+pub const BASE_URL: &str = "https://minotruyenv6.xyz";
 pub const API_URL: &str = "https://api.cloudkk.art";
 
 struct MinoTruyen {
