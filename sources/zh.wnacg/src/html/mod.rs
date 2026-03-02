@@ -23,8 +23,7 @@ impl MangaPage for Document {
 				let href = item.select_first(".pic_box>a")?.attr("href")?;
 				let id = href
 					.split('-')
-					.filter(|s| !s.is_empty())
-					.next_back()?
+					.rfind(|s| !s.is_empty())?
 					.replace(".html", "");
 
 				let cover = item
@@ -58,9 +57,7 @@ impl MangaPage for Document {
 			})
 			.collect();
 
-		let has_next_page = self
-			.select_first(".bot_toolbar .paginator .next")
-			.is_some();
+		let has_next_page = self.select_first(".bot_toolbar .paginator .next").is_some();
 
 		Ok(MangaPageResult {
 			entries,

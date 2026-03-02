@@ -9,6 +9,10 @@ use aidoku::{
 	},
 };
 
+fn send_component(component: HomeComponent) {
+	send_partial_result(&HomePartialResult::Component(component));
+}
+
 impl Home for Wnacg {
 	fn get_home(&self) -> Result<HomeLayout> {
 		// send basic home layout
@@ -81,29 +85,12 @@ impl Home for Wnacg {
 			.map(|res| res?.get_html()?.manga_page_result())
 			.map(|res| Ok(res?.entries));
 
-		let [
-			daily,
-			weekly,
-			monthly,
-			latest,
-			doujinshi,
-			single_volume,
-			magazine,
-			korean,
-		] = results;
-		let daily = daily?;
-		let weekly = weekly?;
-		let monthly = monthly?;
-		let latest = latest?;
-		let doujinshi = doujinshi?;
-		let single_volume = single_volume?;
-		let magazine = magazine?;
-		let korean = korean?;
+		let [daily, weekly, monthly, latest, doujinshi, single_volume, magazine, korean] = results;
 
-		let mut components = Vec::new();
-
-		if !daily.is_empty() {
-			components.push(HomeComponent {
+		if let Ok(daily) = daily
+			&& !daily.is_empty()
+		{
+			send_component(HomeComponent {
 				title: Some("日排行".into()),
 				subtitle: None,
 				value: aidoku::HomeComponentValue::BigScroller {
@@ -113,8 +100,10 @@ impl Home for Wnacg {
 			});
 		}
 
-		if !weekly.is_empty() {
-			components.push(HomeComponent {
+		if let Ok(weekly) = weekly
+			&& !weekly.is_empty()
+		{
+			send_component(HomeComponent {
 				title: Some("周排行".into()),
 				subtitle: None,
 				value: aidoku::HomeComponentValue::MangaList {
@@ -130,8 +119,10 @@ impl Home for Wnacg {
 			});
 		}
 
-		if !monthly.is_empty() {
-			components.push(HomeComponent {
+		if let Ok(monthly) = monthly
+			&& !monthly.is_empty()
+		{
+			send_component(HomeComponent {
 				title: Some("月排行".into()),
 				subtitle: None,
 				value: aidoku::HomeComponentValue::MangaList {
@@ -147,8 +138,10 @@ impl Home for Wnacg {
 			});
 		}
 
-		if !latest.is_empty() {
-			components.push(HomeComponent {
+		if let Ok(latest) = latest
+			&& !latest.is_empty()
+		{
+			send_component(HomeComponent {
 				title: Some("最近更新".into()),
 				subtitle: None,
 				value: aidoku::HomeComponentValue::Scroller {
@@ -162,8 +155,10 @@ impl Home for Wnacg {
 			});
 		}
 
-		if !doujinshi.is_empty() {
-			components.push(HomeComponent {
+		if let Ok(doujinshi) = doujinshi
+			&& !doujinshi.is_empty()
+		{
+			send_component(HomeComponent {
 				title: Some("同人志".into()),
 				subtitle: None,
 				value: aidoku::HomeComponentValue::Scroller {
@@ -177,8 +172,10 @@ impl Home for Wnacg {
 			});
 		}
 
-		if !single_volume.is_empty() {
-			components.push(HomeComponent {
+		if let Ok(single_volume) = single_volume
+			&& !single_volume.is_empty()
+		{
+			send_component(HomeComponent {
 				title: Some("单行本".into()),
 				subtitle: None,
 				value: aidoku::HomeComponentValue::Scroller {
@@ -195,8 +192,10 @@ impl Home for Wnacg {
 			});
 		}
 
-		if !magazine.is_empty() {
-			components.push(HomeComponent {
+		if let Ok(magazine) = magazine
+			&& !magazine.is_empty()
+		{
+			send_component(HomeComponent {
 				title: Some("杂志&短篇".into()),
 				subtitle: None,
 				value: aidoku::HomeComponentValue::Scroller {
@@ -210,8 +209,10 @@ impl Home for Wnacg {
 			});
 		}
 
-		if !korean.is_empty() {
-			components.push(HomeComponent {
+		if let Ok(korean) = korean
+			&& !korean.is_empty()
+		{
+			send_component(HomeComponent {
 				title: Some("韩漫".into()),
 				subtitle: None,
 				value: aidoku::HomeComponentValue::Scroller {
@@ -225,6 +226,6 @@ impl Home for Wnacg {
 			});
 		}
 
-		Ok(HomeLayout { components })
+		Ok(HomeLayout::default())
 	}
 }

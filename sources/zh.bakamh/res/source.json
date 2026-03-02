@@ -1,0 +1,33 @@
+{
+	"info": {
+		"id": "zh.bakamh",
+		"name": "巴卡漫画",
+		"version": 1,
+		"url": "https://bakamh.com",
+		"contentRating": 2,
+		"languages": ["zh"]
+	},
+	"listings": [
+		{
+			"id": "latest",
+			"name": "最近更新"
+		},
+		{
+			"id": "rating",
+			"name": "最多评分"
+		},
+		{
+			"id": "views",
+			"name": "最多浏览"
+		},
+		{
+			"id": "new-manga",
+			"name": "最新发布"
+		}
+	],
+	"config": {
+		"hidesFiltersWhileSearching": true,
+		"supportsAuthorSearch": true,
+		"supportsTagSearch": true
+	}
+}

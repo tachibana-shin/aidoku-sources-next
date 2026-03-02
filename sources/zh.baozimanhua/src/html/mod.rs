@@ -3,10 +3,7 @@ use aidoku::{
 	Manga, MangaPageResult, MangaStatus, Page, Result, Viewer,
 	alloc::{String, Vec, string::ToString as _, vec},
 	error,
-	imports::{
-		html::{Document, Element, ElementList},
-		net::Request,
-	},
+	imports::html::{Document, Element, ElementList},
 	prelude::*,
 };
 use regex::Regex;
@@ -147,8 +144,7 @@ impl MangaPage for Document {
 
 			let Some(key) = url
 				.split('/')
-				.filter(|s| !s.is_empty())
-				.next_back()
+				.rfind(|s| !s.is_empty())
 				.map(|s| s.to_string())
 			else {
 				continue;
@@ -219,12 +215,31 @@ pub trait ChapterPage {
 
 impl ChapterPage for Document {
 	fn chapters(&self, _manga_id: &str) -> Result<Vec<aidoku::Chapter>> {
+		let full_list_title = self.select(".section-title").and_then(|items| {
+			items
+				.filter_map(|el| el.text().map(|t| (el, t)))
+				.find(|(_, t)| t.contains("章节目录") || t.contains("章節目錄"))
+				.map(|(el, _)| el)
+		});
+
+		let raw_items: Vec<Element> = if let Some(ref title_el) = full_list_title {
+			title_el
+				.parent()
+				.and_then(|parent| parent.select("div.pure-g[id] a.comics-chapters__item"))
+				.into_iter()
+				.flatten()
+				.collect()
+		} else {
+			self.select("a.comics-chapters__item")
+				.into_iter()
+				.flatten()
+				.collect()
+		};
+
 		let mut chapters: Vec<aidoku::Chapter> = Vec::new();
-
-		let chapter_items = self.try_select("div.pure-g[id] a.comics-chapters__item")?;
-
 		let mut index = 0.0;
-		for item in chapter_items {
+
+		for item in &raw_items {
 			index += 1.0;
 			let url = item.attr("href").unwrap_or_default();
 
@@ -257,7 +272,14 @@ impl ChapterPage for Document {
 			});
 		}
 
-		chapters.reverse();
+		if full_list_title.is_some() {
+			chapters.reverse();
+		}
+
+		if chapters.is_empty() {
+			bail!("No chapters found");
+		}
+
 		Ok(chapters)
 	}
 }
@@ -268,60 +290,23 @@ pub trait PageList {
 
 impl PageList for Document {
 	fn pages(&self) -> Result<Vec<Page>> {
-		let mut pages: Vec<Page> = Vec::new();
+		let items = self.try_select("img.comic-contain__item")?;
 
-		for item in self.try_select("amp-img.comic-contain__item")? {
-			let url = item.attr("data-src").unwrap_or_default();
-
-			if !url.is_empty() {
-				pages.push(Page {
-					content: aidoku::PageContent::url(url),
-					..Default::default()
-				});
-			}
-		}
-
-		// Handle pagination - check for next chapter
-		if let Some(next_link) = self.select_first("a#next-chapter:has(i.icon-xiangxia)")
-			&& let Some(next_url) = next_link.attr("href")
-			&& !next_url.is_empty()
-			&& next_url != "#"
-		{
-			// Fetch next page
-			let next_html = if next_url.starts_with("http") {
-				Request::get(next_url)?
-			} else {
-				Request::get(format!("{}{}", BASE_URL, next_url))?
-			}
-			.header("Referer", BASE_URL)
-			.html()?;
-
-			for item in next_html.try_select("amp-img.comic-contain__item")? {
+		let pages = items
+			.filter_map(|item| {
 				let url = item.attr("data-src").unwrap_or_default();
-
-				if !url.is_empty() {
-					pages.push(Page {
+				if url.is_empty() {
+					None
+				} else {
+					Some(Page {
 						content: aidoku::PageContent::url(url),
 						..Default::default()
-					});
+					})
 				}
-			}
-		}
+			})
+			.collect();
 
-		// Deduplicate pages by URL
-		let mut unique_pages: Vec<Page> = Vec::new();
-		let mut seen_urls: Vec<String> = Vec::new();
-
-		for page in pages {
-			if let aidoku::PageContent::Url(ref url, _) = page.content
-				&& !seen_urls.contains(url)
-			{
-				seen_urls.push(url.clone());
-				unique_pages.push(page);
-			}
-		}
-
-		Ok(unique_pages)
+		Ok(pages)
 	}
 }
 

@@ -78,6 +78,7 @@ impl ImageRequestProvider for Baozimanhua {
 		url: String,
 		_context: Option<aidoku::PageContext>,
 	) -> Result<Request> {
+		let url = url.replace(".baozicdn.com", ".baozimh.com");
 		Ok(Request::get(url)?.header("Referer", BASE_URL))
 	}
 }

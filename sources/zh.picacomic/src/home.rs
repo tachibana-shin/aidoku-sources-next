@@ -11,6 +11,10 @@ use aidoku::{
 	prelude::*,
 };
 
+fn send_component(component: HomeComponent) {
+	send_partial_result(&HomePartialResult::Component(component));
+}
+
 impl Home for Picacomic {
 	fn get_home(&self) -> Result<HomeLayout> {
 		// send basic home layout
@@ -59,129 +63,103 @@ impl Home for Picacomic {
 			],
 		}));
 
-		let requests = [
-			// daily ranking
-			net::create_request(net::gen_rank_url("H24".into()), HttpMethod::Get, None),
-			// weekly ranking
-			net::create_request(net::gen_rank_url("D7".into()), HttpMethod::Get, None),
-			// monthly ranking
-			net::create_request(net::gen_rank_url("D30".into()), HttpMethod::Get, None),
-			// 大家都在看
-			net::create_request(
-				net::gen_explore_url("大家都在看".into(), "dd".into(), 1),
-				HttpMethod::Get,
-				None,
-			),
-			// 官方都在看
-			net::create_request(
-				net::gen_explore_url("官方都在看".into(), "dd".into(), 1),
-				HttpMethod::Get,
-				None,
-			),
-			// 大湿推荐
-			net::create_request(
-				net::gen_explore_url("大濕推薦".into(), "dd".into(), 1),
-				HttpMethod::Get,
-				None,
-			),
-			// 那年今天
-			net::create_request(
-				net::gen_explore_url("那年今天".into(), "dd".into(), 1),
-				HttpMethod::Get,
-				None,
-			),
-			// latest updates
-			net::create_request(
-				net::gen_explore_url("".into(), "dd".into(), 1),
-				HttpMethod::Get,
-				None,
-			),
-		];
-
-		let requests: [Request; 8] = requests
-			.into_iter()
-			.map(|r| r.map_err(|_| error!("Failed to create request, please check login status")))
-			.collect::<Result<Vec<Request>>>()?
-			.try_into()
-			.map_err(|_| error!("Failed to convert requests to array"))?;
-
-		let responses: [core::result::Result<Response, RequestError>; 8] =
-			Request::send_all(requests)
+		let build_requests = || -> Result<[Request; 8]> {
+			let requests = [
+				// daily ranking
+				net::create_request(net::gen_rank_url("H24".into()), HttpMethod::Get, None),
+				// weekly ranking
+				net::create_request(net::gen_rank_url("D7".into()), HttpMethod::Get, None),
+				// monthly ranking
+				net::create_request(net::gen_rank_url("D30".into()), HttpMethod::Get, None),
+				// 大家都在看
+				net::create_request(
+					net::gen_explore_url("大家都在看".into(), "dd".into(), 1),
+					HttpMethod::Get,
+					None,
+				),
+				// 官方都在看
+				net::create_request(
+					net::gen_explore_url("官方都在看".into(), "dd".into(), 1),
+					HttpMethod::Get,
+					None,
+				),
+				// 大湿推荐
+				net::create_request(
+					net::gen_explore_url("大濕推薦".into(), "dd".into(), 1),
+					HttpMethod::Get,
+					None,
+				),
+				// 那年今天
+				net::create_request(
+					net::gen_explore_url("那年今天".into(), "dd".into(), 1),
+					HttpMethod::Get,
+					None,
+				),
+				// latest updates
+				net::create_request(
+					net::gen_explore_url("".into(), "dd".into(), 1),
+					HttpMethod::Get,
+					None,
+				),
+			];
+			requests
+				.into_iter()
+				.map(|r| {
+					r.map_err(|_| error!("Failed to create request, please check login status"))
+				})
+				.collect::<Result<Vec<Request>>>()?
 				.try_into()
-				.map_err(|_| error!("Failed to convert responses to array"))?;
+				.map_err(|_| error!("Failed to convert requests to array"))
+		};
 
-		let results: [Result<MangaPageResult>; 8] = responses.map(|res| {
-			let mut response = res?;
+		let mut responses: Vec<core::result::Result<Response, RequestError>> =
+			Request::send_all(build_requests()?);
 
-			// Check for 401 and retry with new login if needed
-			if response.status_code() == 401 {
-				// Re-login
-				net::login()?;
-				// Retry the request - but since we have multiple requests, we need to handle this differently
-				// For simplicity, we'll just return an error for now, but ideally we'd retry each request
-				bail!("Authentication expired, please try again");
+		if responses.len() != 8 {
+			bail!("Failed to get all responses");
+		}
+
+		// If any response is 401, re-login and retry all requests
+		if responses
+			.iter()
+			.any(|r| r.as_ref().is_ok_and(|resp| resp.status_code() == 401))
+		{
+			net::login()?;
+			responses = Request::send_all(build_requests()?);
+			if responses.len() != 8 {
+				bail!("Failed to get all responses");
 			}
+		}
 
-			let json: serde_json::Value = response.get_json()?;
-			let data = json.get("data").ok_or(error!("No data in response"))?;
+		// responses[0..3] are rank format, responses[3..8] are explore format
+		let parse_rank =
+			|res: core::result::Result<Response, RequestError>| -> Result<MangaPageResult> {
+				let rank_response: RankResponse = res?.get_json_owned()?;
+				Ok(rank_response.data.into())
+			};
+		let parse_explore =
+			|res: core::result::Result<Response, RequestError>| -> Result<MangaPageResult> {
+				let explore_response: ExploreResponse = res?.get_json_owned()?;
+				Ok(explore_response.data.into())
+			};
 
-			// Handle different response formats
-			if let Some(comics_obj) = data.get("comics").and_then(|c| c.as_object()) {
-				// Explore format
-				let explore_data = ExploreData {
-					comics: ComicsData {
-						docs: serde_json::from_value::<Vec<ComicItem>>(
-							comics_obj
-								.get("docs")
-								.ok_or(error!("No docs in comics"))?
-								.clone(),
-						)
-						.map_err(|_| error!("Failed to parse comic items"))?,
-						page: comics_obj.get("page").and_then(|p| p.as_i64()).unwrap_or(1) as i32,
-						pages: comics_obj
-							.get("pages")
-							.and_then(|p| p.as_i64())
-							.unwrap_or(1) as i32,
-					},
-				};
-				Ok(explore_data.into())
-			} else {
-				// Rank format
-				let rank_data = RankData {
-					comics: serde_json::from_value::<Vec<ComicItem>>(
-						data.get("comics")
-							.ok_or(error!("No comics in data"))?
-							.clone(),
-					)
-					.map_err(|_| error!("Failed to parse comic items"))?,
-				};
-				Ok(rank_data.into())
-			}
-		});
 
-		let [
-			daily,
-			weekly,
-			monthly,
-			popular,
-			official,
-			recommended,
-			today_in_history,
-			latest,
-		] = results;
-		let daily = daily?;
-		let weekly = weekly?;
-		let monthly = monthly?;
-		let popular = popular?;
-		let official = official?;
-		let recommended = recommended?;
-		let today_in_history = today_in_history?;
-		let latest = latest?;
+		let r7 = parse_explore(responses.remove(7));
+		let r6 = parse_explore(responses.remove(6));
+		let r5 = parse_explore(responses.remove(5));
+		let r4 = parse_explore(responses.remove(4));
+		let r3 = parse_explore(responses.remove(3));
+		let r2 = parse_rank(responses.remove(2));
+		let r1 = parse_rank(responses.remove(1));
+		let r0 = parse_rank(responses.remove(0));
 
-		let mut components = Vec::new();
+		let [daily, weekly, monthly, popular, official, recommended, today_in_history, latest] =
+			[r0, r1, r2, r3, r4, r5, r6, r7];
 
-		if !daily.entries.is_empty() {
-			components.push(HomeComponent {
+		if let Ok(daily) = daily
+			&& !daily.entries.is_empty()
+		{
+			send_component(HomeComponent {
 				title: Some("日榜".into()),
 				subtitle: None,
 				value: aidoku::HomeComponentValue::BigScroller {
@@ -191,8 +169,10 @@ impl Home for Picacomic {
 			});
 		}
 
-		if !weekly.entries.is_empty() {
-			components.push(HomeComponent {
+		if let Ok(weekly) = weekly
+			&& !weekly.entries.is_empty()
+		{
+			send_component(HomeComponent {
 				title: Some("周榜".into()),
 				subtitle: None,
 				value: aidoku::HomeComponentValue::MangaList {
@@ -216,8 +196,10 @@ impl Home for Picacomic {
 			});
 		}
 
-		if !monthly.entries.is_empty() {
-			components.push(HomeComponent {
+		if let Ok(monthly) = monthly
+			&& !monthly.entries.is_empty()
+		{
+			send_component(HomeComponent {
 				title: Some("月榜".into()),
 				subtitle: None,
 				value: aidoku::HomeComponentValue::MangaList {
@@ -241,8 +223,10 @@ impl Home for Picacomic {
 			});
 		}
 
-		if !popular.entries.is_empty() {
-			components.push(HomeComponent {
+		if let Ok(popular) = popular
+			&& !popular.entries.is_empty()
+		{
+			send_component(HomeComponent {
 				title: Some("大家都在看".into()),
 				subtitle: None,
 				value: aidoku::HomeComponentValue::Scroller {
@@ -264,8 +248,10 @@ impl Home for Picacomic {
 			});
 		}
 
-		if !official.entries.is_empty() {
-			components.push(HomeComponent {
+		if let Ok(official) = official
+			&& !official.entries.is_empty()
+		{
+			send_component(HomeComponent {
 				title: Some("官方都在看".into()),
 				subtitle: None,
 				value: aidoku::HomeComponentValue::Scroller {
@@ -287,8 +273,10 @@ impl Home for Picacomic {
 			});
 		}
 
-		if !recommended.entries.is_empty() {
-			components.push(HomeComponent {
+		if let Ok(recommended) = recommended
+			&& !recommended.entries.is_empty()
+		{
+			send_component(HomeComponent {
 				title: Some("大湿推荐".into()),
 				subtitle: None,
 				value: aidoku::HomeComponentValue::Scroller {
@@ -310,8 +298,10 @@ impl Home for Picacomic {
 			});
 		}
 
-		if !today_in_history.entries.is_empty() {
-			components.push(HomeComponent {
+		if let Ok(today_in_history) = today_in_history
+			&& !today_in_history.entries.is_empty()
+		{
+			send_component(HomeComponent {
 				title: Some("那年今天".into()),
 				subtitle: None,
 				value: aidoku::HomeComponentValue::Scroller {
@@ -333,8 +323,10 @@ impl Home for Picacomic {
 			});
 		}
 
-		if !latest.entries.is_empty() {
-			components.push(HomeComponent {
+		if let Ok(latest) = latest
+			&& !latest.entries.is_empty()
+		{
+			send_component(HomeComponent {
 				title: Some("最近更新".into()),
 				subtitle: None,
 				value: aidoku::HomeComponentValue::Scroller {
@@ -356,6 +348,6 @@ impl Home for Picacomic {
 			});
 		}
 
-		Ok(HomeLayout { components })
+		Ok(HomeLayout::default())
 	}
 }

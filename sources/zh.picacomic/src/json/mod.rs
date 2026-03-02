@@ -11,6 +11,7 @@ use chrono::DateTime;
 pub struct ComicItem {
 	pub _id: String,
 	pub title: String,
+	#[serde(default)]
 	pub author: String,
 	pub description: Option<String>,
 	pub thumb: Thumb,
