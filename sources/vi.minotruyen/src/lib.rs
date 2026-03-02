@@ -266,7 +266,7 @@ impl Source for MinoTruyen {
 
 		let servers = serde_json::from_str::<Vec<ChapterContent>>(
 			&decrypt_cryptojs_passphrase(&data, SECRET_DATA_CHAPTER)
-				.map_err(|_| error!("decrypt error"))?,
+				.map_err(|e| aidoku::anyhow!("Failed to decrypt chapter data: {}", e))?,
 		)?;
 
 		let server = defaults_get::<String>("server").unwrap_or("0".to_owned());
