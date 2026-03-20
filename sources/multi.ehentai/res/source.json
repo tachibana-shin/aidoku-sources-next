@@ -1,0 +1,32 @@
+{
+	"info": {
+		"id": "multi.ehentai",
+		"name": "E-Hentai",
+		"version": 2,
+		"url": "https://e-hentai.org",
+		"contentRating": 2,
+		"languages": [
+			"All",
+			"ja",
+			"en",
+			"zh",
+			"nl",
+			"fr",
+			"de",
+			"hu",
+			"it",
+			"ko",
+			"pl",
+			"pt-BR",
+			"ru",
+			"es",
+			"th",
+			"vi"
+		]
+	},
+	"config": {
+		"languageSelectType": "single",
+		"supportsAuthorSearch": true,
+		"supportsTagSearch": true
+	}
+}

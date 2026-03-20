@@ -1,0 +1,41 @@
+[
+	{
+		"type": "text",
+		"id": "artist",
+		"title": "Artist",
+		"placeholder": "Artist name"
+	},
+	{
+		"type": "text",
+		"id": "group",
+		"title": "Group",
+		"placeholder": "Group name"
+	},
+	{
+		"type": "sort",
+		"title": "Sort",
+		"canAscend": false,
+		"options": [
+			"Date Added",
+			"Date Published",
+			"Popular: Today",
+			"Popular: Week",
+			"Popular: Month",
+			"Popular: Year"
+		]
+	},
+	{
+		"type": "select",
+		"id": "type",
+		"title": "Type",
+		"options": [
+			"Any",
+			"Artist CG",
+			"Doujinshi",
+			"Game CG",
+			"Image Set",
+			"Manga"
+		],
+		"ids": ["", "artistcg", "doujinshi", "gamecg", "imageset", "manga"]
+	}
+]
