@@ -48,7 +48,7 @@ impl Impl for TruyenQQ {
 			chapter_parse_id: |url| {
 				String::from(
 					url.rsplit_once("-chap-")
-						.map(|(_, tail)| tail.trim_end_matches(".html"))
+						.map(|(_, tail)| tail)
 						.unwrap_or_default(),
 				)
 			},
@@ -69,7 +69,7 @@ impl Impl for TruyenQQ {
 			page_url_transformer: |url| url,
 			user_agent: Some(USER_AGENT),
 
-			search_page: |page| format!("tim-kiem/trang-{}.html", page),
+			search_page: |page| format!("tim-kiem/trang-{}", page),
 			manga_page: |params, manga| format!("{}/truyen-tranh/{}", params.base_url, manga.key),
 			page_list_page: |params, manga, chapter| {
 				format!(
@@ -77,7 +77,7 @@ impl Impl for TruyenQQ {
 					params.base_url, manga.key, chapter.key
 				)
 			},
-            home_manga_cover_selector: ".book_avatar img",
+			home_manga_cover_selector: ".book_avatar img",
 			get_search_url: |params, q, page, filters| {
 				let mut query = QueryParameters::new();
 				query.push("q", q.as_deref());
@@ -98,7 +98,7 @@ impl Impl for TruyenQQ {
 							let title = aidoku::helpers::uri::encode_uri_component(value);
 							if !title.is_empty() {
 								return Ok(format!(
-									"{}/tim-kiem/trang-{page}.html?q={title}",
+									"{}/tim-kiem/trang-{page}?q={title}",
 									params.base_url
 								));
 							}
@@ -120,7 +120,7 @@ impl Impl for TruyenQQ {
 				}
 
 				Ok(format!(
-					"{}/tim-kiem-nang-cao/trang-{}.html?{}",
+					"{}/tim-kiem-nang-cao/trang-{}?{}",
 					params.base_url, page, query
 				))
 			},

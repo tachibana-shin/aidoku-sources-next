@@ -150,13 +150,10 @@ impl Url {
 			_ => HttpMethod::Get,
 		};
 		let body = match self {
-			Url::Search { query, sort, .. } => Some(format!(
-				r#"{{
-					"keyword": "{}",
-					"sort": "{}"
-				}}"#,
-				query, sort
-			)),
+			Url::Search { query, sort, .. } => Some(serde_json::json!({
+				"keyword": query,
+				"sort": sort
+			}).to_string()),
 			_ => None,
 		};
 
@@ -247,13 +244,11 @@ pub fn login() -> Result<String> {
 		bail!("Need to log in first");
 	}
 
-	let body = format!(
-		r#"{{
-			"email": "{}",
-			"password": "{}"
-		}}"#,
-		username, password
-	);
+	let body = serde_json::json!({
+		"email": username,
+		"password": password,
+	})
+	.to_string();
 
 	let request = create_request(gen_login_url(), HttpMethod::Post, Some(body))?;
 	// Override authorization header for login
@@ -296,21 +291,24 @@ pub fn create_request(url: String, method: HttpMethod, body: Option<String>) -> 
 	request = request.header("app-uuid", "defaultUuid");
 	request = request.header("app-version", "2.2.1.3.3.4");
 	request = request.header("image-quality", &crate::settings::get_image_quality());
-	request = request.header("time", &gen_time());
-	request = request.header("nonce", &gen_nonce());
-	request = request.header(
-		"signature",
-		&gen_signature(
-			&url,
-			&gen_time(),
-			&gen_nonce(),
-			match method {
-				HttpMethod::Get => "GET",
-				HttpMethod::Post => "POST",
-				_ => "GET",
-			},
-		)?,
-	);
+
+	let time = gen_time();
+	let nonce = gen_nonce();
+	let signature = gen_signature(
+		&url,
+		&time,
+		&nonce,
+		match method {
+			HttpMethod::Get => "GET",
+			HttpMethod::Post => "POST",
+			_ => "GET",
+		},
+	)?;
+
+	request = request.header("time", &time);
+	request = request.header("nonce", &nonce);
+	request = request.header("signature", &signature);
+
 	request = request.header("Accept", "application/vnd.picacomic.com.v1+json");
 	if let Some(ref token) = token {
 		request = request.header("Authorization", token);
