@@ -13,7 +13,7 @@ pub struct ArchiveMetadata {
 #[serde(rename_all = "camelCase")]
 pub struct SearchResult {
 	pub data: Vec<Archive>,
-	pub draw: i32,
+	#[serde(default)]
 	pub records_filtered: i32,
 	pub records_total: i32,
 }

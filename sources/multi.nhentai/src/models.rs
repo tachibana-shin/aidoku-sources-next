@@ -79,21 +79,13 @@ pub struct NHentaiTitle {
 	pub pretty: String,
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone)]
-pub struct NHentaiGalleryPagesResponse {
-	pub gallery_id: i32,
-	pub media_id: String,
-	pub num_pages: i32,
-	pub pages: Vec<NHentaiPageInfo>,
-}
-
 impl NHentaiGallery {
 	pub fn id_str(&self) -> String {
 		self.id.to_string()
 	}
 }
 
-fn make_image_url(path: &str, is_cover: bool) -> String {
+pub fn make_image_url(path: &str, is_cover: bool) -> String {
 	if path.starts_with("http://") || path.starts_with("https://") {
 		return path.to_string();
 	}

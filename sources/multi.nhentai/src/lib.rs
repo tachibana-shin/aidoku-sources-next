@@ -12,6 +12,8 @@ mod home;
 mod models;
 mod settings;
 
+use core::cell::RefCell;
+
 use models::*;
 
 const BASE_URL: &str = "https://nhentai.net";
@@ -20,11 +22,15 @@ const USER_AGENT: &str = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_2 like Mac OS X)
 						  AppleWebKit/605.1.15 (KHTML, like Gecko) GSA/300.0.598994205 \
 						  Mobile/15E148 Safari/604";
 
-struct NHentai;
+struct NHentai {
+	cache: RefCell<Option<(String, NHentaiGallery)>>,
+}
 
 impl Source for NHentai {
 	fn new() -> Self {
-		Self
+		Self {
+			cache: RefCell::new(None),
+		}
 	}
 
 	fn get_search_manga_list(
@@ -179,28 +185,36 @@ impl Source for NHentai {
 				};
 				manga.chapters = Some(vec![chapter]);
 			}
+
+			// Cache the fetched gallery for potential reuse in get_page_list
+			self.cache
+				.borrow_mut()
+				.replace((manga.key.clone(), gallery));
 		}
 
 		Ok(manga)
 	}
 
 	fn get_page_list(&self, _manga: Manga, chapter: Chapter) -> Result<Vec<Page>> {
-		let api_url = format!("{API_URL}/galleries/{}/pages", chapter.key);
-		let response: NHentaiGalleryPagesResponse = Request::get(&api_url)?
-			.header("User-Agent", USER_AGENT)
-			.json_owned()?;
+		// Try to reuse cached gallery fetched by get_manga_update
+		let maybe_cached = self.cache.borrow();
+		let gallery: NHentaiGallery = match &*maybe_cached {
+			Some((cached_key, cached_gallery)) if cached_key == &chapter.key => {
+				cached_gallery.clone()
+			}
+			_ => {
+				let api_url = format!("{API_URL}/galleries/{}", chapter.key);
+				Request::get(&api_url)?
+					.header("User-Agent", USER_AGENT)
+					.json_owned()?
+			}
+		};
 
-		let pages = response
+		let pages = gallery
 			.pages
-			.into_iter()
+			.iter()
 			.map(|page| {
-				let path = if page.path.starts_with("http") {
-					page.path
-				} else if page.path.starts_with('/') {
-					format!("https://i.nhentai.net{}", page.path)
-				} else {
-					format!("https://i.nhentai.net/{}", page.path)
-				};
+				let path = make_image_url(&page.path, false);
 
 				Page {
 					content: PageContent::url(path),

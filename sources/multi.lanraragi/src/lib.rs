@@ -129,13 +129,27 @@ impl Source for Lanraragi {
 
 		if needs_details {
 			manga.title = archive.title;
-			// Remove date_added and URL tags from display tags
+
+			// Extract first rating: tag value
+			let rating_tag: Option<String> = archive.tags.split(',').find_map(|tag| {
+				let tag = tag.trim();
+				if tag.to_lowercase().starts_with("rating:") {
+					tag.strip_prefix("rating:").map(|s| s.trim().to_string())
+				} else {
+					None
+				}
+			});
+
+			// Remove date_added, URL-like and rating: tags from display tags
 			let display_tags: Vec<String> = archive
 				.tags
 				.split(',')
 				.filter_map(|tag| {
 					let tag = tag.trim();
-					if tag.starts_with("date_added:") || tag.contains("://") {
+					if tag.to_lowercase().starts_with("rating:")
+						|| tag.starts_with("date_added:")
+						|| tag.contains("://")
+					{
 						None
 					} else {
 						Some(tag.to_string())
@@ -143,7 +157,7 @@ impl Source for Lanraragi {
 				})
 				.collect();
 
-			// Filter tags containing URLs for description
+			// Collect URL-like tags for description
 			let url_tags: Vec<String> = archive
 				.tags
 				.split(',')
@@ -157,10 +171,18 @@ impl Source for Lanraragi {
 				})
 				.collect();
 
-			manga.description = if url_tags.is_empty() {
+			// Build description: rating on first line (if present), then URLs
+			let mut desc_parts: Vec<String> = Vec::new();
+			if let Some(r) = rating_tag {
+				desc_parts.push(format!("Rating: {}", r));
+			}
+			if !url_tags.is_empty() {
+				desc_parts.push(url_tags.join("  \n"));
+			}
+			manga.description = if desc_parts.is_empty() {
 				None
 			} else {
-				Some(url_tags.join("  \n"))
+				Some(desc_parts.join("  \n"))
 			};
 
 			manga.cover = Some(format!(

@@ -1,5 +1,5 @@
 [package]
-name = "comix"
+name = "aquamanga"
 version = "0.1.0"
 edition = "2024"
 
@@ -7,9 +7,8 @@ edition = "2024"
 crate-type = ["cdylib"]
 
 [dependencies]
-aidoku = { git = "https://github.com/Aidoku/aidoku-rs.git", features = ["json"] }
-base64 = { version = "0.22", default-features = false, features = ["alloc"] }
-serde = { version = "1.0", features = ["derive", "alloc"], default-features = false }
+aidoku = { git = "https://github.com/Aidoku/aidoku-rs.git", version = "0.3.0", features = ["json"] }
+madara = { path = "../../templates/madara" }
 
 [dev-dependencies]
 aidoku = { git = "https://github.com/Aidoku/aidoku-rs.git", features = ["test"] }
