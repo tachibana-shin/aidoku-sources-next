@@ -1,6 +1,6 @@
 use crate::{BASE_URL, net::Url};
 use aidoku::{
-	Manga, MangaPageResult, MangaStatus, Viewer, Page, Result,
+	Manga, MangaPageResult, MangaStatus, Page, Result, Viewer,
 	alloc::{String, Vec, string::ToString as _},
 	error,
 	imports::{
@@ -12,37 +12,50 @@ use aidoku::{
 use regex::Regex;
 
 fn extract_chapter_number(title: &str) -> Option<f32> {
-	let re = Regex::new(r"(?:第\s*)([\d０-９]+(?:\.[\d０-９]+)?)|([\d０-９]+(?:\.[\d０-９]+)?)\s*(?:话|話|章|回|卷|册|冊)").ok()?;
-	if let Some(captures) = re.captures(title) {
-		let num_match = captures.get(1).or_else(|| captures.get(2));
-		if let Some(num_match) = num_match {
-			let num_str = num_match
-				.as_str()
-				.chars()
-				.map(|c| match c {
-					'０' => '0',
-					'１' => '1',
-					'２' => '2',
-					'３' => '3',
-					'４' => '4',
-					'５' => '5',
-					'６' => '6',
-					'７' => '7',
-					'８' => '8',
-					'９' => '9',
-					'．' => '.',
-					other => other,
-				})
-				.collect::<String>();
-			if let Ok(num) = num_str.parse::<f32>() {
-				return Some(num);
-			}
-		}
+	// Normalize fullwidth digits and dot to ASCII, and lowercase for matching
+	let normalize = |s: &str| {
+		s.chars()
+			.map(|c| match c {
+				'０' => '0',
+				'１' => '1',
+				'２' => '2',
+				'３' => '3',
+				'４' => '4',
+				'５' => '5',
+				'６' => '6',
+				'７' => '7',
+				'８' => '8',
+				'９' => '9',
+				'．' => '.',
+				other => other,
+			})
+			.collect::<String>()
+			.to_lowercase()
+	};
+
+	let s = normalize(title);
+
+	if let Ok(re) =
+		Regex::new(r"(?:第\s*)(\d+(?:\.\d+)?)|(\d+(?:\.\d+)?)\s*(?:话|話|章|回|卷|册|冊)")
+		&& let Some(captures) = re.captures(&s)
+		&& let Some(m) = captures.get(1).or_else(|| captures.get(2))
+		&& let Ok(num) = m.as_str().parse::<f32>()
+	{
+		return Some(num);
+	}
+
+	// Fallback: find any standalone number in the string
+	if let Ok(re2) = Regex::new(r"(?:\s|\.)+(\d+(?:\.\d+)?)\s*$")
+		&& let Some(captures) = re2.captures(&s)
+		&& let Some(m) = captures.get(1)
+		&& let Ok(num) = m.as_str().parse::<f32>()
+	{
+		return Some(num);
 	}
 	None
 }
 
-fn extract_chapter_key(href: &str) -> String {
+fn extract_key(href: &str) -> String {
 	href.split("/")
 		.filter(|s| !s.is_empty())
 		.last()
@@ -57,15 +70,23 @@ fn create_chapter(
 	chapters_len: usize,
 	volume_thumbnail: Option<String>,
 ) -> aidoku::Chapter {
-	let chapter_key = extract_chapter_key(&chapter_href);
+	let chapter_key = extract_key(&chapter_href);
 	let chapter_num = extract_chapter_number(&title).unwrap_or(chapters_len as f32 + 1.0);
 	let url = format!("{}{}", BASE_URL, chapter_href);
 
 	aidoku::Chapter {
 		key: chapter_key,
 		title: Some(title),
-		volume_number: Some(volume_num),
-		chapter_number: Some(chapter_num),
+		volume_number: if volume_num >= 0.0 {
+			Some(volume_num)
+		} else {
+			None
+		},
+		chapter_number: if chapter_num >= 0.0 {
+			Some(chapter_num)
+		} else {
+			None
+		},
 		url: Some(url),
 		thumbnail: volume_thumbnail,
 		..Default::default()
@@ -79,6 +100,16 @@ pub trait MangaPage {
 
 impl MangaPage for Document {
 	fn update_details(&self, manga: &mut Manga) -> Result<()> {
+		// If the page is an error/notice page (e.g. removed content),
+		// Bail early and put the message into manga.description so caller
+		// can surface the info instead of failing on missing selectors.
+		if let Some(err_el) = self.select_first(".aui-ver-form") {
+			let msg = err_el.text().unwrap_or_default().trim().to_string();
+			if !msg.is_empty() {
+				manga.description = Some(msg);
+				return Ok(());
+			}
+		}
 		manga.cover = self.try_select_first(".book-cover")?.attr("src");
 		manga.title = self
 			.try_select_first("h1.book-title")?
@@ -121,10 +152,7 @@ impl MangaPage for Document {
 			.any(|tag| tag.contains("大陸") || tag.contains("韓國"))
 		{
 			Viewer::Webtoon
-		} else if tags
-			.iter()
-			.any(|tag| tag.contains("日本"))
-		{
+		} else if tags.iter().any(|tag| tag.contains("日本")) {
 			Viewer::RightToLeft
 		} else {
 			Viewer::LeftToRight
@@ -141,12 +169,7 @@ impl MangaPage for Document {
 			.unwrap_or_default();
 
 		if alternate_url.contains("detail") {
-			let key = alternate_url
-				.split("/")
-				.filter(|s| !s.is_empty())
-				.last()
-				.unwrap_or("")
-				.replace(".html", "");
+			let key = extract_key(&alternate_url);
 
 			let cover = self.try_select_first(".book-cover")?.attr("src");
 			let title = self
@@ -164,12 +187,7 @@ impl MangaPage for Document {
 			let items = self.try_select(".book-li>a")?;
 			for item in items {
 				let href = item.attr("href").unwrap_or_default();
-				let key = href
-					.split("/")
-					.filter(|s| !s.is_empty())
-					.last()
-					.unwrap_or("")
-					.replace(".html", "");
+				let key = extract_key(&href);
 
 				let cover = item
 					.select_first(".book-cover>img")
@@ -193,12 +211,8 @@ impl MangaPage for Document {
 		let has_next_page = self
 			.select_first("#pagelink")
 			.and_then(|pagelink| {
-				let strong_text = pagelink
-					.select_first("strong")
-					.and_then(|s| s.text());
-				let last_text = pagelink
-					.select_first(".last")
-					.and_then(|l| l.text());
+				let strong_text = pagelink.select_first("strong").and_then(|s| s.text());
+				let last_text = pagelink.select_first(".last").and_then(|l| l.text());
 				if let (Some(current), Some(last)) = (strong_text, last_text) {
 					Some(current != last)
 				} else {
@@ -259,9 +273,7 @@ impl ChapterPage for Document {
 						.and_then(|v| v.attr("href"))
 						.unwrap_or_default();
 					let vol_url = format!("{}{}", BASE_URL, vol_href);
-					let vol_html = Request::get(vol_url)?
-						.header("Origin", BASE_URL)
-						.html()?;
+					let vol_html = Request::get(vol_url)?.header("Origin", BASE_URL).html()?;
 					vol_html.try_select(".catalog-volume .chapter-li-a")?
 				} else {
 					chapter_links
@@ -297,11 +309,7 @@ impl PageList for Document {
 	fn pages(&self) -> Result<Vec<Page>> {
 		let mut pages: Vec<Page> = Vec::new();
 		for item in self.try_select("#acontentz>img")? {
-			let url = item
-				.attr("data-src")
-				.unwrap_or_default()
-				.trim()
-				.to_string();
+			let url = item.attr("data-src").unwrap_or_default().trim().to_string();
 			pages.push(Page {
 				content: aidoku::PageContent::Url(url, None),
 				..Default::default()

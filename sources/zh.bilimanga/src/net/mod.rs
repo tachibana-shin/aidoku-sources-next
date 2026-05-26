@@ -49,8 +49,9 @@ impl Url {
 			.header("Cookie", "night=0");
 
 		// Add special referer for search requests
-		if let Url::Search { .. } = self {
-			request = request.header("Referer", &format!("{}/search.html", BASE_URL));
+		if let Url::Search { query, .. } = self {
+			let referer = format!("{}/search.html?searchkey={}", BASE_URL, query);
+			request = request.header("Referer", &referer);
 		}
 
 		Ok(request)
@@ -179,28 +180,26 @@ impl Url {
 					}
 					_ => {}
 				},
-				FilterValue::MultiSelect { id, included, .. } => {
-					if id.as_str() == "作品主题" && !included.is_empty() {
-						tagid = included.join("-");
-					}
+				FilterValue::MultiSelect { id, included, .. }
+					if id.as_str() == "作品主题" && !included.is_empty() =>
+				{
+					tagid = included.join("-");
 				}
-				FilterValue::Sort { id, index, .. } => {
-					if id.as_str() == "排序" {
-						let orders = [
-							"lastupdate",
-							"postdate",
-							"weekvisit",
-							"monthvisit",
-							"weekvote",
-							"monthvote",
-							"weekflower",
-							"monthflower",
-							"words",
-							"goodnum",
-						];
-						if let Some(o) = orders.get(*index as usize) {
-							order = o.to_string();
-						}
+				FilterValue::Sort { id, index, .. } if id.as_str() == "排序" => {
+					let orders = [
+						"lastupdate",
+						"postdate",
+						"weekvisit",
+						"monthvisit",
+						"weekvote",
+						"monthvote",
+						"weekflower",
+						"monthflower",
+						"words",
+						"goodnum",
+					];
+					if let Some(o) = orders.get(*index as usize) {
+						order = o.to_string();
 					}
 				}
 				_ => {}
@@ -257,7 +256,11 @@ impl Display for Url {
 				)
 			}
 			Url::Search { query, page } => {
-				write!(f, "{}/search/{}_{}.html", BASE_URL, query, page)
+				if *page == 1 {
+					write!(f, "{}/search.html?searchkey={}", BASE_URL, query)
+				} else {
+					write!(f, "{}/search/{}_{}.html", BASE_URL, query, page)
+				}
 			}
 			Url::Author { author } => {
 				write!(f, "{}/author/{}.html", BASE_URL, author)

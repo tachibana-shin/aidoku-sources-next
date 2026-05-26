@@ -5,12 +5,11 @@ mod json;
 mod net;
 
 use aidoku::{
-	alloc::{string::ToString as _, String, Vec},
-	error,
-	imports::net::Request,
-	prelude::*,
 	Chapter, DeepLinkHandler, DeepLinkResult, ImageRequestProvider, Listing, ListingProvider,
 	Manga, MangaPageResult, Page, Result, Source,
+	alloc::{String, Vec, string::ToString as _},
+	imports::net::Request,
+	prelude::*,
 };
 use html::MangaPage as _;
 use net::Url;
@@ -32,17 +31,61 @@ impl Source for Happymh {
 	) -> Result<MangaPageResult> {
 		let url = Url::from_query_or_filters(query.as_deref(), page, &filters)?;
 		let json: serde_json::Value = url.request()?.send()?.get_json()?;
-		let data = json
-			.as_object()
-			.ok_or_else(|| error!("Expected JSON object"))?;
-		let data = data
-			.get("data")
-			.and_then(|v| v.as_object())
-			.ok_or_else(|| error!("Expected data object"))?;
-		let list = data
-			.get("items")
-			.and_then(|v| v.as_array())
-			.ok_or_else(|| error!("Expected items array"))?;
+
+		enum ArraySource<'a> {
+			Borrowed(&'a [serde_json::Value]),
+			Owned(Vec<serde_json::Value>),
+		}
+
+		// Try to locate the items array in several possible places and formats.
+		// Server sometimes returns `data.items` as an array or as a JSON-string.
+		// Other times `items` can be top-level or under `payload`.
+		let mut list_vec: Option<ArraySource> = None;
+
+		// Helper to try extract an array or parse a stringified array
+		fn try_extract<'a>(v: &'a serde_json::Value) -> Option<ArraySource<'a>> {
+			if let Some(arr) = v.as_array() {
+				return Some(ArraySource::Borrowed(arr));
+			}
+			if let Some(s) = v.as_str()
+				&& let Ok(parsed) = serde_json::from_str::<serde_json::Value>(s)
+				&& let Some(arr) = parsed.as_array()
+			{
+				return Some(ArraySource::Owned(arr.clone()));
+			}
+			None
+		}
+
+		// 1) data.items
+		if let Some(data_obj) = json.get("data") {
+			if let Some(items) = data_obj.get("items") {
+				list_vec = try_extract(items);
+			} else if let Some(arr) = data_obj.as_array() {
+				list_vec = Some(ArraySource::Borrowed(arr));
+			}
+		}
+
+		// 2) top-level items
+		if list_vec.is_none()
+			&& let Some(items) = json.get("items")
+		{
+			list_vec = try_extract(items);
+		}
+
+		// 3) payload.items
+		if list_vec.is_none()
+			&& let Some(payload) = json.get("payload")
+			&& let Some(items) = payload.get("items")
+		{
+			list_vec = try_extract(items);
+		}
+
+		let list = match list_vec {
+			Some(ArraySource::Borrowed(v)) => v,
+			Some(ArraySource::Owned(ref v)) => v,
+			None => bail!("Expected items array in search response"),
+		};
+
 		let mut mangas: Vec<Manga> = Vec::new();
 
 		for item in list {

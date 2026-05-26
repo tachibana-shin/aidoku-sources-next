@@ -1,0 +1,19 @@
+{
+	"info": {
+		"id": "zh.rumanhua",
+		"name": "入漫画",
+		"version": 1,
+		"urls": [
+			"https://m.rumanhua.org",
+			"https://www.rumanhua.org"
+		],
+		"contentRating": 0,
+		"languages": [
+			"zh"
+		]
+	},
+	"config": {
+		"hidesFiltersWhileSearching": true,
+		"supportsAuthorSearch": false
+	}
+}

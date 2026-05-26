@@ -180,18 +180,24 @@ impl MangaPage for Document {
 
 impl ChapterPage for Document {
 	fn chapters(&self, _manga_key: &str) -> Result<Vec<Chapter>> {
-		let items: Vec<_> = self
-			.select(".listing-chapters_main li")
-			.map(|els| els.collect())
-			.unwrap_or_default();
+		let items: Vec<_> = match self.select(".listing-chapters_main li.chapter-loveYou") {
+			Some(els) => els.collect(),
+			None => self
+				.select(".listing-chapters_main li")
+				.map(|els| els.collect())
+				.unwrap_or_default(),
+		};
 
 		let len = items.len();
 		let chapters: Vec<Chapter> = items
 			.into_iter()
 			.enumerate()
 			.filter_map(|(index, li)| {
-				let a = li.select_first("a[chapter-data-url]")?;
-				let chapter_url = a.attr("chapter-data-url")?;
+				let a = li.select_first("a")?;
+				let chapter_url = match a.attr("storage-chapter-url") {
+					Some(u) => u,
+					None => a.attr("href")?,
+				};
 
 				let key = chapter_url
 					.trim_start_matches("https://")
@@ -231,7 +237,10 @@ pub fn get_page_list(chapter_key: &str) -> Result<Vec<Page>> {
 		.select("img[id]")
 		.map(|imgs| {
 			imgs.filter_map(|img| {
-				let src = img.attr("src").map(|s| s.trim().to_string())?;
+				let src = img
+					.attr("data-manga-src")
+					.or_else(|| img.attr("src"))
+					.map(|s| s.trim().to_string())?;
 				if src.is_empty() {
 					return None;
 				}
