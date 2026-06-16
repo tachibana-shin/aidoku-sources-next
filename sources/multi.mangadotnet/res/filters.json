@@ -1,0 +1,62 @@
+[
+	{
+		"id": "author",
+		"type": "text",
+		"title": "Author",
+		"placeholder": "Author name"
+	},
+	{
+		"id": "artist",
+		"type": "text",
+		"title": "Artist",
+		"placeholder": "Artist name"
+	},
+	{
+		"id": "sortBy",
+		"type": "sort",
+		"title": "Sort",
+		"canAscend": true,
+		"options": [
+			"Relevance",
+			"Latest",
+			"A → Z",
+			"Chapters",
+			"Most Viewed",
+			"Most Tracked",
+			"Top Rated"
+		],
+		"default": {
+			"index": 0,
+			"ascending": true
+		}
+	},
+	{
+		"id": "status",
+		"type": "select",
+		"title": "Status",
+		"options": [
+			"Any",
+			"Ongoing",
+			"Completed",
+			"Hiatus"
+		]
+	},
+	{
+		"id": "origin",
+		"type": "multi-select",
+		"title": "Type",
+		"canExclude": false,
+		"options": [
+			"Manga",
+			"Manhwa",
+			"Manhua",
+			"One Shot"
+		],
+		"ids": [
+			"JP",
+			"KR",
+			"CN",
+			"ONESHOT"
+		]
+	}
+]

@@ -1,0 +1,90 @@
+[
+	{
+		"type": "group",
+		"title": "Settings",
+		"items": [
+			{
+				"type": "switch",
+				"key": "hideNSFW",
+				"title": "Hide NSFW Content",
+				"default": true,
+				"refreshes": [
+					"content",
+					"filters"
+				]
+			},
+			{
+				"type": "switch",
+				"key": "dedupedChapter",
+				"title": "Deduplicate Chapters",
+				"default": false,
+				"refreshes": [
+					"content"
+				]
+			}
+		],
+		"footer": "Official chapters are preferred, followed by the most recent. Warning: It can be slow on large lists."
+	},
+	{
+		"type": "group",
+		"title": "Advanced Settings",
+		"items": [
+			{
+				"type": "switch",
+				"key": "useWebViewFetch",
+				"title": "Use CF Workaround",
+				"default": false,
+				"refreshes": [
+					"content",
+					"filters"
+				]
+			}
+		],
+		"footer": "CloudFlare workaround uses an invisible WebView to maintain a proper session. This will allow basic function to work except for cover images. If the source stops working for you periodically, try this option."
+	},
+	{
+		"type": "group",
+		"items": [
+			{
+				"type": "page",
+				"key": "contentFilters",
+				"title": "Content Filters",
+				"items": [
+					{
+						"type": "group",
+						"items": [
+							{
+								"type": "multi-select",
+								"key": "contentTypes",
+								"title": "Content Types",
+								"titles": [
+									"Manga",
+									"Manhwa",
+									"Manhua"
+								],
+								"values": [
+									"JP",
+									"KR",
+									"CN,TW"
+								],
+								"default": ["JP", "KR", "CN,TW"],
+								"refreshes": ["content"]
+							}
+						]
+					}
+				]
+			},
+			{
+				"type": "button",
+				"key": "resetFilters",
+				"title": "Reset Filters",
+				"confirmTitle": "Reset Filters",
+				"confirmText": "Are you sure you want to remove all configured content filters?",
+				"destructive": true,
+				"notification": "resetFilters",
+				"refreshes": ["content"]
+			}
+		],
+		"footer": "Content filters are applied to the home page and listings only."
+	}
+]

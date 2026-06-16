@@ -1,0 +1,16 @@
+{
+	"info": {
+		"id": "multi.mangadotnet",
+		"name": "Mangadotnet",
+		"version": 2,
+		"url": "https://mangadot.net",
+		"contentRating": 1,
+		"languages": [
+			"multi"
+		],
+		"minAppVersion": "0.8.3"
+	},
+	"config": {
+		"supportsTagSearch": true
+	}
+}

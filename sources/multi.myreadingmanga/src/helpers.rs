@@ -1,0 +1,63 @@
+use aidoku::imports::{defaults::defaults_get, html::Document, net::Request};
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
+
+pub const BASE_URL: &str = "https://myreadingmanga.info";
+pub const HTTP_URL: &str = "http://myreadingmanga.info";
+pub const UA: &str = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) \
+	AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 \
+	Mobile/15E148 Safari/604.1";
+
+pub fn page_url(base: &str, page: i32) -> String {
+	if page <= 1 {
+		return base.to_string();
+	}
+	if let Some((path, query)) = base.split_once('?') {
+		alloc::format!("{}/page/{}/?{}", path.trim_end_matches('/'), page, query)
+	} else {
+		alloc::format!("{}/page/{}/", base.trim_end_matches('/'), page)
+	}
+}
+
+pub fn clean_title(raw: &str) -> String {
+	raw.find(" [")
+		.map_or_else(|| raw.trim().to_string(), |i| raw[..i].trim().to_string())
+}
+
+pub fn get_user_languages() -> Vec<String> {
+	let mut slugs: Vec<String> = Vec::new();
+
+	let langs = defaults_get::<Vec<String>>("languages").unwrap_or_default();
+
+	for lang in langs {
+		if let Some(slug) = map_lang_to_class(&lang)
+			&& !slugs.iter().any(|s| s == slug)
+		{
+			slugs.push(slug.into());
+		}
+	}
+
+	slugs
+}
+
+pub fn map_lang_to_class(lang: &str) -> Option<&'static str> {
+	match lang.to_lowercase().trim() {
+		"en" => Some("english"),
+		"ja" | "jp" => Some("jp"),
+		"zh" | "cn" => Some("chinese"),
+		"ko" | "kr" => Some("korean"),
+		"es" => Some("spanish"),
+		"fr" => Some("french"),
+		"de" => Some("german"),
+		"it" => Some("italian"),
+		"pt" => Some("portuguese"),
+		_ => None,
+	}
+}
+
+pub fn get(url: &str) -> aidoku::imports::error::Result<Document> {
+	Ok(Request::get(url)?
+		.header("User-Agent", UA)
+		.header("Referer", BASE_URL)
+		.html()?)
+}

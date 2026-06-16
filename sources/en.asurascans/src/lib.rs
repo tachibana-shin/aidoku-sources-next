@@ -1,9 +1,9 @@
 #![no_std]
 use aidoku::{
-	AidokuError, Chapter, ContentRating, DeepLinkHandler, DeepLinkResult, DynamicListings,
-	FilterValue, HashMap, Home, HomeComponent, HomeComponentValue, HomeLayout, Link, Listing,
-	ListingProvider, Manga, MangaPageResult, MangaStatus, MangaWithChapter, MigrationHandler,
-	NotificationHandler, Page, PageContent, Result, Source, Viewer, WebLoginHandler,
+	Chapter, ContentRating, DeepLinkHandler, DeepLinkResult, DynamicListings, FilterValue, HashMap,
+	Home, HomeComponent, HomeComponentValue, HomeLayout, Link, Listing, ListingProvider, Manga,
+	MangaPageResult, MangaStatus, MangaWithChapter, MigrationHandler, NotificationHandler, Page,
+	PageContent, Result, Source, Viewer, WebLoginHandler,
 	alloc::{String, Vec, string::ToString, vec},
 	helpers::uri::QueryParameters,
 	imports::{
@@ -185,8 +185,7 @@ impl Source for AsuraScans {
 				.and_then(|el| el.attr("props"))
 				.ok_or_else(|| error!("Missing astro-island"))?;
 
-			let json = serde_json::from_str::<serde_json::Value>(&island_props)
-				.map_err(AidokuError::JsonParseError)?;
+			let json = serde_json::from_str::<serde_json::Value>(&island_props)?;
 			let chapters_arr = json["chapters"][1]
 				.as_array()
 				.ok_or_else(|| error!("Missing chapters"))?;
@@ -289,8 +288,7 @@ impl Source for AsuraScans {
 			.and_then(|el| el.attr("props"))
 			.ok_or_else(|| error!("Missing astro-island"))?;
 
-		let json = serde_json::from_str::<serde_json::Value>(&island_props)
-			.map_err(AidokuError::JsonParseError)?;
+		let json = serde_json::from_str::<serde_json::Value>(&island_props)?;
 
 		let page_arr = json["pages"][1]
 			.as_array()
@@ -446,10 +444,15 @@ impl ListingProvider for AsuraScans {
 					.select(".comics-ranking-list > a")
 					.map(|els| {
 						els.filter_map(|el| {
+							// the ranking page doesn't have extra ids appended to the slug
+							let key = el.attr("abs:href").and_then(|url| {
+								url.split('/')
+									.skip_while(|segment| *segment != "comics")
+									.nth(1)
+									.map(Into::into)
+							})?;
 							Some(Manga {
-								key: el
-									.attr("abs:href")
-									.and_then(|url| helpers::get_manga_key(&url))?,
+								key,
 								title: el.select_first(".flex-1 > .text-sm")?.own_text()?,
 								cover: el.select_first("img").and_then(|el| el.attr("abs:src")),
 								..Default::default()
