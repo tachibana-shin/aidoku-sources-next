@@ -9,6 +9,7 @@ use aidoku::{
 	prelude::*,
 	Chapter, FilterValue, Manga, Page, PageContent, Result, Source, Viewer,
 };
+use base64::{engine::general_purpose::STANDARD, Engine as _};
 use wpcomics::{helpers::extract_f32_from_string, Impl, Params, WpComics};
 
 const USER_AGENT: &str = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) GSA/300.0.598994205 Mobile/15E148 Safari/604";
@@ -17,6 +18,36 @@ fn remove_node(node: Element, content_html: &mut String) {
 	if let Some(node_html) = node.outer_html() {
 		*content_html = content_html.replace(&node_html, "");
 	}
+}
+
+fn decode_base64_to_bytes(b64: &str) -> Vec<u8> {
+	STANDARD.decode(b64).unwrap_or_default()
+}
+
+fn xor_decode(b64_data: &str, key: &str) -> String {
+	let bytes = decode_base64_to_bytes(b64_data);
+	let key_len = key.len();
+	let out: Vec<u8> = bytes
+		.iter()
+		.enumerate()
+		.map(|(i, &b)| b ^ key.as_bytes()[i % key_len])
+		.collect();
+	String::from_utf8(out).unwrap_or_default()
+}
+
+fn decode_chunk(data: &str, strategy: &str, key: &str) -> String {
+	let prepared = if strategy == "base64_reverse" {
+		data.chars().rev().collect::<String>()
+	} else {
+		data.to_string()
+	};
+
+	if strategy == "xor_shuffle" {
+		return xor_decode(&prepared, key);
+	}
+
+	let bytes = decode_base64_to_bytes(&prepared);
+	String::from_utf8(bytes).unwrap_or_default()
 }
 
 struct Hako;
@@ -278,107 +309,135 @@ impl Impl for Hako {
 		let url = (params.page_list_page)(params, &manga, &chapter);
 		let html = self.create_request(cache, params, &url, None)?.html()?;
 
-		let Some(content) = html.select_first("#chapter-content") else {
+		// Decode protected content if present
+		let content_html = if let Some(protected) = html.select_first("#chapter-c-protected") {
+			let strategy = protected.attr("data-s").unwrap_or_default();
+			let key = protected.attr("data-k").unwrap_or_default();
+			let data_c = protected.attr("data-c").unwrap_or_default();
+
+			let chunks: Vec<String> =
+				serde_json::from_str(&data_c).unwrap_or_default();
+
+			if chunks.is_empty() {
+				bail!("No content chunks found");
+			}
+
+			let mut sorted_chunks = chunks;
+			sorted_chunks.sort_by(|a, b| {
+				let id_a = a[..4].parse::<i32>().unwrap_or(0);
+				let id_b = b[..4].parse::<i32>().unwrap_or(0);
+				id_a.cmp(&id_b)
+			});
+
+			let decoded: Vec<String> = sorted_chunks
+				.iter()
+				.map(|chunk| {
+					let body = &chunk[4..];
+					decode_chunk(body, &strategy, &key)
+				})
+				.collect();
+
+			decoded.concat()
+		} else if let Some(content) = html.select_first("#chapter-content") {
+			content.html().unwrap_or_default()
+		} else {
 			bail!("Failed to get chapter content");
 		};
-		let Some(mut content_html) = content.html() else {
-			bail!("Failed to get chapter content HTML");
-		};
 
-		// modify html
-		if let Some(list) =
-			content.select(".d-none, script, #chapter-content > a[target='__blank']")
+		let decoded_doc = Html::parse_with_url(content_html.as_bytes(), &url)?;
+
+		let mut cleaned = content_html;
+
+		// Remove hidden elements, scripts, blank-target links
+		if let Some(list) = decoded_doc
+			.select(".d-none, script, #chapter-content > a[target='__blank']")
 		{
 			for node in list {
-				remove_node(node, &mut content_html);
-			}
-		}
-		if let Some(list) = content.select("[id^=\"note\"]") {
-			for node in list {
-				let none_print_node = node.select(".none-print.inline");
-				if let Some(none_print_node) = none_print_node {
-					for node in none_print_node {
-						remove_node(node, &mut content_html);
-					}
-				}
-
-				let note_content_node = node.select_first(".note-content").and_then(|v| v.parent());
-				if let Some(note_content_node) = note_content_node {
-					remove_node(note_content_node, &mut content_html);
-				}
+				remove_node(node, &mut cleaned);
 			}
 		}
 
-		if let Some(styles_node) = content.select("[style]") {
+		// Remove display:none elements
+		if let Some(styles_node) = decoded_doc.select("[style]") {
 			for style_node in styles_node {
 				if let Some(style) = style_node.attr("style") {
 					let has_display_none = style.contains("display:")
 						&& style[style.find("display:").unwrap_or_default()..].contains("none");
 					if has_display_none {
-						remove_node(style_node, &mut content_html);
+						remove_node(style_node, &mut cleaned);
 					}
 				}
 			}
 		}
 
-		// edit notes
-		if let Some(notes) = content.select("[id^=\"note\"]") {
+		// Clean up note content
+		if let Some(list) = decoded_doc.select("[id^=\"note\"]") {
+			for node in list {
+				let none_print_node = node.select(".none-print.inline");
+				if let Some(none_print_node) = none_print_node {
+					for node in none_print_node {
+						remove_node(node, &mut cleaned);
+					}
+				}
+
+				let note_content_node =
+					node.select_first(".note-content").and_then(|v| v.parent());
+				if let Some(note_content_node) = note_content_node {
+					remove_node(note_content_node, &mut cleaned);
+				}
+			}
+		}
+
+		// Replace [noteXXX] references with anchor links
+		if let Some(notes) = decoded_doc.select("[id^=\"note\"]") {
 			let ids = notes
 				.into_iter()
 				.filter_map(|node| node.attr("id"))
 				.collect::<Vec<_>>();
 
-			// Replace occurrences like [note123] with an anchor only if the id exists
-			let original = content_html.clone();
-			content_html = String::new();
+			let original = cleaned.clone();
+			cleaned = String::new();
 			let mut last_idx: usize = 0;
 
 			while let Some(rel_start) = original[last_idx..].find('[') {
 				let start = last_idx + rel_start;
-				// find closing bracket after start
 				if let Some(rel_end) = original[start + 1..].find(']') {
-					let end = start + 1 + rel_end; // index of ']'
-									// append text before '['
-					content_html.push_str(&original[last_idx..start]);
+					let end = start + 1 + rel_end;
+					cleaned.push_str(&original[last_idx..start]);
 					let inner = &original[start + 1..end];
 					let is_note = inner.len() > 4
 						&& inner.starts_with("note")
 						&& inner[4..].chars().all(|c| c.is_ascii_digit());
 					if is_note && ids.iter().any(|id| id == inner) {
-						content_html.push_str(&format!(
+						cleaned.push_str(&format!(
 							"<a id=\"anchor-{id}\" href=\"#{id}\" class=\"note-link\">**</a>",
 							id = inner
 						));
 					} else {
-						// not a matching note id — keep original including brackets
-						content_html.push_str(&original[start..=end]);
+						cleaned.push_str(&original[start..=end]);
 					}
 					last_idx = end + 1;
 					continue;
 				}
-				// no closing bracket found; stop searching
 				break;
 			}
-			// append remaining tail
-			content_html.push_str(&original[last_idx..]);
+			cleaned.push_str(&original[last_idx..]);
 		}
 
-		// remove comments
-		while let Some(start) = content_html.find("<!--") {
-			if let Some(end) = content_html[start..].find("-->") {
+		// Remove HTML comments
+		while let Some(start) = cleaned.find("<!--") {
+			if let Some(end) = cleaned[start..].find("-->") {
 				let end_pos = start + end + 3;
-				content_html.drain(start..end_pos);
+				cleaned.drain(start..end_pos);
 			} else {
 				break;
 			}
 		}
 
-		// end modify html
-
 		let description = html.select_first("h6.title-item").and_then(|v| v.text());
 
 		pages.push(Page {
-			content: PageContent::Text(format!("<!--html-->{content_html}")),
+			content: PageContent::Text(format!("<!--html-->{cleaned}")),
 			has_description: description.is_some(),
 			description,
 			..Default::default()
